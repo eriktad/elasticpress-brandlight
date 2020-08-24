@@ -1,0 +1,20 @@
+{
+  "name": "eriktad/elasticpress-brandlight",
+  "description": "description",
+  "minimum-stability": "stable",
+  "license": "GPL-3.0-or-later",
+  "authors": [
+    {
+      "name": "Erik",
+      "email": "eriktadevosyan07@gmail.com"
+    }
+  ],
+  "require": {
+    
+  },
+  "autoload": {
+    "psr-4": {
+      "Brandlight\\ElasticPress\\": "src/"
+    }
+  }
+}
