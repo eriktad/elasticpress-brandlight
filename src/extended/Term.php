@@ -8,9 +8,7 @@ use Brandlight\ElasticPress\Bootstrap;
 use ElasticPress\Elasticsearch as Elasticsearch;
 use NovemBit\i18n\Module;
 
-
-class Post extends \ElasticPress\Indexable\Post\Post {
-
+class Term extends \ElasticPress\Indexable\Term\Term {
 
 	public $language;
 
@@ -31,10 +29,7 @@ class Post extends \ElasticPress\Indexable\Post\Post {
 		$translations = [];
 
 		$_fields = [
-			'post_title'   => 'text',
-			'post_excerpt' => 'text',
-			'post_content' => 'html_fragment',
-			'permalink'    => 'url',
+			'name'   => 'text'
 		];
 
 		$cache_key = md5( static::class . implode( ',', $object_ids ) );

@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    
+    "cache/cache": "*"
   },
   "autoload": {
     "psr-4": {

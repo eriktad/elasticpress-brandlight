@@ -5,6 +5,7 @@ namespace Brandlight\ElasticPress;
 
 
 use Brandlight\ElasticPress\extended\Post;
+use Brandlight\ElasticPress\extended\Term;
 use ElasticPress\Indexables;
 use NovemBit\i18n\Module;
 
@@ -82,11 +83,7 @@ class Hooks {
 	public function __construct( $parent ) {
 		$this->parent = $parent;
 		add_action( 'init', [ $this, 'epiInit' ], 11 );
-		add_filter( 'ep_post_sync_args_multilingual_post_prepare_meta', [
-			$this,
-			'epiMultilingualPostPrepareMeta',
-		], 10, 3 );
-		add_filter( 'ep_prepared_post_meta', [ $this, 'epiWhiteListMetas' ], 10, 1 );
+		add_filter( 'ep_prepared_post_meta', [ $this, 'epiWhiteListMetas' ], 10, 2 );
 		add_filter( 'ep_autosuggest_options', [ $this, 'epiAutosuggestOptions' ] );
 		add_action(
 			'wp_enqueue_scripts', [ $this, 'epiEnqueueScripts' ],
@@ -95,70 +92,54 @@ class Hooks {
 	}
 
 	public function epiInit() {
-		$languages = Module::instance()->localization->getAcceptLanguages();
+		$languages         = Module::instance()->localization->getAcceptLanguages();
 		$original_language = Module::instance()->localization->getFromLanguage();
-		unset( $languages[ array_search( $original_language,$languages ) ] );
+		unset( $languages[ array_search( $original_language, $languages ) ] );
 		foreach ( $languages as $language ) {
-			$indexable_posts = new Post( $language );
+			$indexable_post = new Post( $language );
+			$indexable_term = new Term( $language );
 
-//			$indexable_terms = new \ElasticPress\Indexable\Term\Term();
-
-			Indexables::factory()->register( $indexable_posts );
-
-//			Indexables::factory()->register( $indexable_terms );
-
+			Indexables::factory()->register( $indexable_post );
+			Indexables::factory()->register( $indexable_term );
 		}
 	}
 
-	public function epiMultilingualPostPrepareMeta( $args, $language, $post_id ) {
-		$to_translate = [];
-		$translations = [];
-
-		$_fields = [
-			'post_title'            => 'text',
-			'post_excerpt'          => 'text',
-			'post_content'          => 'html',
-			'post_content_filtered' => 'html',
-			'permalink'             => 'url',
-		];
-
-		foreach ( $_fields as $name => $type ) {
-			if ( isset( $args[ $name ] ) ) {
-				$to_translate[ $type ] = $args[ $name ];
-			}
-		}
-
-		foreach ( $to_translate as $type => $texts ) {
-			$translations[ $type ] = Module::instance()
-				->translation
-				->setLanguages( [ $language ] )
-				->{$type}
-				->translate( [ $texts ] );
-		}
-		foreach ( $_fields as $name => $type ) {
-			if ( isset( $args[ $name ] ) ) {
-				$args[ $name ] = $translations[ $type ][ $args[ $name ] ][ $language ] ?? $args[ $name ];
-			}
-		}
-
-		return $args;
-	}
-
-	public function epiWhiteListMetas( $metas ) {
+	public function epiWhiteListMetas( $metas, $post ) {
 		foreach ( $metas as $key => $data ) {
 			if ( ! in_array( $key, $this->white_list_metas, true ) ) {
 				unset( $metas[ $key ] );
 			} else {
 				if ( $key == '_thumbnail_id' && ! empty( $data ) ) {
-					$image_id                          = $data[ 0 ];
-					$images                            = [];
-					$images[ 'thumbnail' ]             = wp_get_attachment_image_url( $image_id, 'thumbnail' );
-					$images[ 'woocommerce_thumbnail' ] = wp_get_attachment_image_url( $image_id, 'woocommerce_thumbnail' );
-					$images[ 'ftc-450x450-c' ]         = wp_get_attachment_image_url( $image_id, 'ftc-450x450-c' );
-					if ( $images[ 'thumbnail' ] && $images[ 'woocommerce_thumbnail' ] && $images[ 'ftc-450x450-c' ] ) {
+					$image_id              = $data[ 0 ];
+					$images                = [];
+					$thumbnail             = wp_get_attachment_image_src( $image_id, 'thumbnail' );
+					$woocommerce_thumbnail = wp_get_attachment_image_src( $image_id, 'woocommerce_thumbnail' );
+					$ftc_450               = wp_get_attachment_image_src( $image_id, 'ftc-450x450-c' );
+					if ( $thumbnail && $woocommerce_thumbnail && $ftc_450 ) {
+						$to_thumbnail[ 'url' ]                = $thumbnail[ 0 ];
+						$to_thumbnail[ 'width' ]              = $thumbnail[ 1 ];
+						$to_thumbnail[ 'height' ]             = $thumbnail[ 2 ];
+						$to_woocommerce_thumbnail[ 'url' ]    = $woocommerce_thumbnail[ 0 ];
+						$to_woocommerce_thumbnail[ 'width' ]  = $woocommerce_thumbnail[ 1 ];
+						$to_woocommerce_thumbnail[ 'height' ] = $woocommerce_thumbnail[ 2 ];
+						$to_ftc_450[ 'url' ]                  = $ftc_450[ 0 ];
+						$to_ftc_450[ 'width' ]                = $ftc_450[ 1 ];
+						$to_ftc_450[ 'height' ]               = $ftc_450[ 2 ];
+						$images[ 'thumbnail' ]                = json_encode( $to_thumbnail );
+						$images[ 'woocommerce_thumbnail' ]    = json_encode( $to_woocommerce_thumbnail );
+						$images[ 'ftc-450x450-c' ]            = json_encode( $to_ftc_450 );
+
 						$metas[ 'images' ] = $images;
 					}
 				}
+			}
+		}
+
+		if ( $post->post_type == 'product' ) {
+			$product = wc_get_product( $post );
+			if ( $product ) {
+				$metas[ 'is_on_sale' ]   = $product->is_on_sale();
+				$metas[ 'product_type' ] = (string) $product->get_type();
 			}
 		}
 
