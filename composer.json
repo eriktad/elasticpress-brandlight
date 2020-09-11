@@ -1,7 +1,8 @@
 {
   "name": "eriktad/elasticpress-brandlight",
   "description": "description",
-  "minimum-stability": "stable",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
   "license": "GPL-3.0-or-later",
   "authors": [
     {
@@ -10,7 +11,9 @@
     }
   ],
   "require": {
-    "cache/cache": "*"
+    "novembit/complex-cross-architecture": "dev-master",
+    "cache/cache": "*",
+    "ext-json": "*"
   },
   "autoload": {
     "psr-4": {

@@ -13,4 +13,6 @@
 
 include __DIR__ . '/vendor/autoload.php';
 
-\Brandlight\ElasticPress\Bootstrap::getInstance();
+define( 'EP_DASHBOARD_SYNC', false );
+
+\Brandlight\ElasticPress\Plugin::instance( __FILE__ );

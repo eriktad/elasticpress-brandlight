@@ -4,7 +4,7 @@
 namespace Brandlight\ElasticPress\extended;
 
 
-use Brandlight\ElasticPress\Bootstrap;
+use Brandlight\ElasticPress\Plugin;
 use ElasticPress\Elasticsearch as Elasticsearch;
 use NovemBit\i18n\Module;
 
@@ -33,7 +33,7 @@ class Term extends \ElasticPress\Indexable\Term\Term {
 		];
 
 		$cache_key = md5( static::class . implode( ',', $object_ids ) );
-		$documents = Bootstrap::getInstance()->getCachePool()->get( $cache_key );
+		$documents = Plugin::getInstance()->getCachePool()->get( $cache_key );
 		if ( null === $documents ) {
 			$documents = [];
 			foreach ( $object_ids as $object_id ) {
@@ -47,7 +47,7 @@ class Term extends \ElasticPress\Indexable\Term\Term {
 
 				$documents[ $object_id ] = $document;
 			}
-			Bootstrap::getInstance()->getCachePool()->set( $cache_key, $documents, 60*60 );
+			Plugin::getInstance()->getCachePool()->set( $cache_key, $documents, 60 * 60 );
 		}
 
 		foreach ( $to_translate as $type => $texts ) {

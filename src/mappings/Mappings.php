@@ -3,21 +3,22 @@
 
 namespace Brandlight\ElasticPress\mappings;
 
+use NovemBit\CCA\wp\PluginComponent;
 
-use Brandlight\ElasticPress\Bootstrap;
+/**
+ * Class Mappings
+ *
+ * @package Brandlight\ElasticPress\mappings
+ *
+ * @property Post $post
+ */
+class Mappings extends PluginComponent {
 
-class Mappings {
+	public $components = [
+		'post' => Post::class
+	];
 
-	/**
-	 * @var Bootstrap
-	 */
-	public $parent;
-
-	public $post;
-
-	public function __construct( $parent ) {
-		$this->parent = $parent;
-		$this->post = new Post( $this );
+	public function main( ?array $params = [] ): void {
+		// TODO: Implement main() method.
 	}
-
 }

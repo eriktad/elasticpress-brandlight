@@ -9,39 +9,35 @@ use League\Flysystem\Adapter\Local;
 use League\Flysystem\Filesystem;
 use Psr\SimpleCache\CacheInterface;
 
-class Bootstrap {
-	/**
-	 * @var Hooks
-	 */
-	public $hooks;
-
-	/**
-	 * @var Mappings
-	 */
-	public $mappings;
+/**
+ * Class Plugin
+ *
+ * @package Brandlight\ElasticPress
+ *
+ * @property Hooks $hooks
+ * @property Mappings $mappings
+ */
+class Plugin extends \NovemBit\CCA\wp\Plugin {
 
 	private $cache_pool;
 
-	private function __construct() {
-
-		$filesystemAdapter = new Local( sys_get_temp_dir() . '/' . md5( self::class ) );
-		$filesystem        = new Filesystem( $filesystemAdapter );
-		$this->cache_pool  = new FilesystemCachePool( $filesystem );
-		$this->hooks       = new Hooks( $this );
-		$this->mappings    = new Mappings( $this );
-	}
-
-	private static $instance;
-
-	public static function getInstance() {
-		if ( ! isset( self::$instance ) ) {
-			self::$instance = new self();
-		}
-
-		return self::$instance;
-	}
+	public $components = [
+		'mappings' => Mappings::class,
+		'hooks'    => Hooks::class,
+	];
 
 	public function getCachePool(): CacheInterface {
 		return $this->cache_pool;
+	}
+
+	protected function main(): void {
+		$filesystemAdapter = new Local( sys_get_temp_dir() . '/' . md5( self::class ) );
+		$filesystem        = new Filesystem( $filesystemAdapter );
+		$this->cache_pool  = new FilesystemCachePool( $filesystem );
+
+	}
+
+	public function getName(): string {
+		return 'elasticpress-brandlight';
 	}
 }

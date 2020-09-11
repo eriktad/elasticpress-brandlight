@@ -4,7 +4,7 @@
 namespace Brandlight\ElasticPress\extended;
 
 
-use Brandlight\ElasticPress\Bootstrap;
+use Brandlight\ElasticPress\Plugin;
 use ElasticPress\Elasticsearch as Elasticsearch;
 use NovemBit\i18n\Module;
 
@@ -67,7 +67,7 @@ class Post extends \ElasticPress\Indexable\Post\Post {
 		$to_translate = [];
 		$use_cache    = count( $object_ids ) > 1;
 		$cache_key    = md5( static::class . implode( ',', $object_ids ) );
-		$documents    = $use_cache ? Bootstrap::getInstance()->getCachePool()->get( $cache_key ) : null;
+		$documents    = $use_cache ? Plugin::instance()->getCachePool()->get( $cache_key ) : null;
 		if ( null === $documents ) {
 			$documents = [];
 			foreach ( $object_ids as $object_id ) {
@@ -78,7 +78,7 @@ class Post extends \ElasticPress\Indexable\Post\Post {
 				$documents[ $object_id ] = $document;
 			}
 			if ( $use_cache ) {
-				Bootstrap::getInstance()->getCachePool()->set( $cache_key, $documents, 60 * 60 );
+				Plugin::instance()->getCachePool()->set( $cache_key, $documents, 60 * 60 );
 			}
 		}
 
@@ -112,46 +112,14 @@ class Post extends \ElasticPress\Indexable\Post\Post {
 		if ( false === $document ) {
 			return false;
 		}
-
-		/**
-		 * Conditionally kill indexing on a specific object
-		 *
-		 * @hook   ep_{indexable_slug}_index_kill
-		 *
-		 * @param  {bool} $kill True to not index
-		 * @param  {int} $object_id Id of object to index
-		 *
-		 * @return {bool}  New kill value
-		 * @since  3.0
-		 */
 		if ( apply_filters( 'ep_' . $this->slug . '_index_kill', false, $object_id ) ) {
 			return false;
 		}
 
-		/**
-		 * Filter document before index
-		 *
-		 * @hook   ep_pre_index_{indexable_slug}
-		 *
-		 * @param  {array} $document Document to index
-		 *
-		 * @return {array} New document
-		 * @since  3.0
-		 */
 		$document = apply_filters( 'ep_pre_index_' . $this->slug, $document );
 
 		$return = Elasticsearch::factory()->index_document( $this->get_index_name(), $this->slug, $document, $blocking );
 
-		/**
-		 * Fires after document is indexed
-		 *
-		 * @hook   ep_after_index_{indexable_slug}
-		 *
-		 * @param  {array} $document Document to index
-		 * @param  {array|boolean} $return ES response on success, false on failure
-		 *
-		 * @since  3.0
-		 */
 		do_action( 'ep_after_index_' . $this->slug, $document, $return );
 
 		return $return;

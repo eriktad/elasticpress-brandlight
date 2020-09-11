@@ -5,90 +5,43 @@ namespace Brandlight\ElasticPress;
 
 
 use Brandlight\ElasticPress\extended\Post;
-use Brandlight\ElasticPress\extended\Term;
+use Brandlight\ElasticPress\helpers\CustomMetasBuilder;
+use Brandlight\ElasticPress\mappings\Metas;
+use Brandlight\ElasticPress\helpers\PostTermsHierarchyBuilder;
 use ElasticPress\Indexables;
+use NovemBit\CCA\wp\PluginComponent;
 use NovemBit\i18n\Module;
 
-class Hooks {
+class Hooks extends PluginComponent {
+	use Metas;
 
-	/**
-	 * @var Bootstrap
-	 */
-	public $parent;
+	public const REINDEX_TRIGGERED   = 1;
+	public const REINDEX_IN_PROGRESS = 2;
+	public const REINDEX_SUCCESS     = 3;
+	public const REINDEX_FAILED      = 4;
 
-	public $white_list_metas = [
-		'uid_barcodes',
-		'uid_gtins',
-		'uid_mfns',
-		'uid_nav_item_ids',
-		'uid_tc_last_update',
-		'uid_vendor_item_ids',
-		'uid_viart_ids',
-		'grade',
-		'_thumbnail_id',
-		'_product_attributes',
-		'_wpb_vc_js_status',
-		'_swatch_type',
-		'total_sales',
-		'_downloadable',
-		'_virtual',
-		'_regular_price',
-		'_sale_price',
-		'_tax_status',
-		'_tax_class',
-		'_purchase_note',
-		'_featured',
-		'_weight',
-		'_length',
-		'_width',
-		'_height',
-		'_visibility',
-		'_sku',
-		'_sale_price_dates_from',
-		'_sale_price_dates_to',
-		'_price',
-		'_sold_individually',
-		'_manage_stock',
-		'_backorders',
-		'_stock',
-		'_upsell_ids',
-		'_crosssell_ids',
-		'_stock_status',
-		'_product_version',
-		'_product_tabs',
-		'_override_tab_layout',
-		'_suggested_price',
-		'_min_price',
-		'_customer_user',
-		'_variable_billing',
-		'_wc_average_rating',
-		'_product_image_gallery',
-		'_bj_lazy_load_skip_post',
-		'_min_variation_price',
-		'_max_variation_price',
-		'_min_price_variation_id',
-		'_max_price_variation_id',
-		'_min_variation_regular_price',
-		'_max_variation_regular_price',
-		'_min_regular_price_variation_id',
-		'_max_regular_price_variation_id',
-		'_min_variation_sale_price',
-		'_max_variation_sale_price',
-		'_min_sale_price_variation_id',
-		'_max_sale_price_variation_id',
-		'_default_attributes',
-		'_swatch_type_options',
-	];
-
-	public function __construct( $parent ) {
-		$this->parent = $parent;
+	public function main( ?array $params = [] ): void {
 		add_action( 'init', [ $this, 'epiInit' ], 11 );
+		add_action( 'ep_post_sync_args', [ $this, 'epiAddHierarchicalTaxonomies' ], 10, 2 );
 		add_filter( 'ep_prepared_post_meta', [ $this, 'epiWhiteListMetas' ], 10, 2 );
 		add_filter( 'ep_autosuggest_options', [ $this, 'epiAutosuggestOptions' ] );
+		add_filter( 'ep_allow_post_content_filtered_index', function () {
+			return false;
+		} );
 		add_action(
 			'wp_enqueue_scripts', [ $this, 'epiEnqueueScripts' ],
 			10
 		);
+
+		add_action( 'toplevel_page_elasticpress', [
+			$this,
+			'epiAdminFooter',
+		], 9 );
+		add_filter( 'cron_schedules', [ $this, 'reindexScheduleInterval' ] );
+		if ( ! wp_next_scheduled( 'epi_reindex_interval' ) ) {
+			wp_schedule_event( time(), 'every_tree_minutes', 'epi_reindex_interval' );
+		}
+		add_action( 'epi_reindex_interval', [ $this, 'runCLIReindex' ] );
 	}
 
 	public function epiInit() {
@@ -97,39 +50,34 @@ class Hooks {
 		unset( $languages[ array_search( $original_language, $languages ) ] );
 		foreach ( $languages as $language ) {
 			$indexable_post = new Post( $language );
-			$indexable_term = new Term( $language );
+//			$indexable_term = new Term( $language );
 
 			Indexables::factory()->register( $indexable_post );
-			Indexables::factory()->register( $indexable_term );
+//			Indexables::factory()->register( $indexable_term );
 		}
+	}
+
+	public function epiAddHierarchicalTaxonomies( $post_args, $post_id ) {
+		$terms_hierarchy                        = PostTermsHierarchyBuilder::get( $post_id );
+		$post_args[ 'hierarchical_taxonomies' ] = $terms_hierarchy;
+
+		return $post_args;
 	}
 
 	public function epiWhiteListMetas( $metas, $post ) {
 		foreach ( $metas as $key => $data ) {
-			if ( ! in_array( $key, $this->white_list_metas, true ) ) {
+			if ( ! in_array( $key, self::$white_list_metas, true ) ) {
 				unset( $metas[ $key ] );
 			} else {
-				if ( $key == '_thumbnail_id' && ! empty( $data ) ) {
-					$image_id              = $data[ 0 ];
-					$images                = [];
-					$thumbnail             = wp_get_attachment_image_src( $image_id, 'thumbnail' );
-					$woocommerce_thumbnail = wp_get_attachment_image_src( $image_id, 'woocommerce_thumbnail' );
-					$ftc_450               = wp_get_attachment_image_src( $image_id, 'ftc-450x450-c' );
-					if ( $thumbnail && $woocommerce_thumbnail && $ftc_450 ) {
-						$to_thumbnail[ 'url' ]                = $thumbnail[ 0 ];
-						$to_thumbnail[ 'width' ]              = $thumbnail[ 1 ];
-						$to_thumbnail[ 'height' ]             = $thumbnail[ 2 ];
-						$to_woocommerce_thumbnail[ 'url' ]    = $woocommerce_thumbnail[ 0 ];
-						$to_woocommerce_thumbnail[ 'width' ]  = $woocommerce_thumbnail[ 1 ];
-						$to_woocommerce_thumbnail[ 'height' ] = $woocommerce_thumbnail[ 2 ];
-						$to_ftc_450[ 'url' ]                  = $ftc_450[ 0 ];
-						$to_ftc_450[ 'width' ]                = $ftc_450[ 1 ];
-						$to_ftc_450[ 'height' ]               = $ftc_450[ 2 ];
-						$images[ 'thumbnail' ]                = json_encode( $to_thumbnail );
-						$images[ 'woocommerce_thumbnail' ]    = json_encode( $to_woocommerce_thumbnail );
-						$images[ 'ftc-450x450-c' ]            = json_encode( $to_ftc_450 );
-
-						$metas[ 'images' ] = $images;
+				if ( ! empty( $data ) ) {
+					if ( $key == '_thumbnail_id' ) {
+						$metas[ 'images' ] = CustomMetasBuilder::generateImagesData( $data[ 0 ] );
+					}
+					if ( $key == '_stock_status' ) {
+						$metas[ '_stock_status' ] =  CustomMetasBuilder::generateStockStatusWithReadableName( $data[ 0 ] );
+					}
+					if ( $key == 'grade' ) {
+						$metas[ $key ][ 0 ] = min( (float) $data[ 0 ], 5.0 );
 					}
 				}
 			}
@@ -137,19 +85,77 @@ class Hooks {
 
 		if ( $post->post_type == 'product' ) {
 			$product = wc_get_product( $post );
-			if ( $product ) {
-				$metas[ 'is_on_sale' ]   = $product->is_on_sale();
-				$metas[ 'product_type' ] = (string) $product->get_type();
-			}
+			$product_metas = CustomMetasBuilder::generateProductMetas( $product );
+			if( $product_metas ){
+			    foreach ( $product_metas as $key => $value ){
+			        $metas[ $key ] = $value;
+                }
+            }
 		}
 
 		return $metas;
 	}
 
+
+
 	public function epiAutosuggestOptions( $options ) {
 		$options[ 'link_pattern_callback' ] = 'bl_ep_autosuggest_link_pattern';
 
 		return $options;
+	}
+
+	public function epiAdminFooter() {
+		if ( wp_verify_nonce( $_POST[ Plugin::instance()->getName() ] ?? null, 'reindex' ) ) {
+			if ( $this->triggerCronJob() ) {
+				echo 'Reindex triggered';
+			} else {
+				echo 'Reindex already in progress';
+			}
+		}
+		?>
+        <form method="post">
+			<?php echo wp_nonce_field( 'reindex', Plugin::instance()->getName() ); ?>
+            <button type="submit" class="button">
+                <a class="dashicons dashicons-update"></a> Trigger reindex
+            </button>
+        </form>
+		<?php
+	}
+
+	public function triggerCronJob() {
+		$option_name = Plugin::instance()->getName() . '_reindex_in_progress';
+		$job_status  = get_option( $option_name );
+		if ( $job_status == self::REINDEX_IN_PROGRESS ) {
+			return false;
+		}
+
+		return update_option( $option_name, self::REINDEX_TRIGGERED );
+	}
+
+	public function reindexScheduleInterval( $schedules ) {
+		$schedules[ 'every_tree_minutes' ] = [
+			'interval' => 180,
+			'display'  => esc_html__( 'Every tree minutes' ),
+		];
+
+		return $schedules;
+	}
+
+	public function runCLIReindex() {
+		$option_in_progress = Plugin::instance()->getName() . '_reindex_in_progress';
+		$job_status         = get_option( $option_in_progress );
+		$wp_cli_exist       = shell_exec( 'command -v wp' ) ? true : false;
+
+		if ( $job_status == self::REINDEX_TRIGGERED && $wp_cli_exist ) {
+			update_option( $option_in_progress, self::REINDEX_IN_PROGRESS );
+			$executed = exec( 'wp elasticpress put-mapping && wp elasticpress index' );
+			update_option( 'asdqwe', $executed );
+			if ( $executed != null ) {
+				update_option( $option_in_progress, self::REINDEX_SUCCESS );
+			} else {
+				update_option( $option_in_progress, self::REINDEX_FAILED );
+			}
+		}
 	}
 
 	public function epiEnqueueScripts() {
