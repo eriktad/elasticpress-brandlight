@@ -61,7 +61,7 @@ class Hooks extends PluginComponent {
 	 */
 	public function changePostStructureToIndex( $post_args, $post_id ) {
 		$terms_hierarchy                        = PostTermsHierarchyBuilder::get( $post_id );
-//		var_dump( $terms_hierarchy );die;
+
 		$post_args[ 'hierarchical_taxonomies' ] = $terms_hierarchy;
 		$post_args[ 'permalink' ] = wp_make_link_relative( $post_args[ 'permalink' ] );
 
