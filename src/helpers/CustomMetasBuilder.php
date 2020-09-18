@@ -5,6 +5,7 @@ namespace Brandlight\ElasticPress\helpers;
 
 
 use Brandlight\ElasticPress\mappings\Metas;
+use WC_Product_Variable;
 
 class CustomMetasBuilder {
 	use Metas;
@@ -57,31 +58,92 @@ class CustomMetasBuilder {
 	 *
 	 * @return array|bool
 	 */
-	public static function generateProductMetas( \WC_Product $product ){
+	public static function generateProductMetas( \WC_Product $product ) {
 		$metas = [];
 		if ( $product ) {
 			$metas[ 'is_on_sale' ]   = $product->is_on_sale();
 			$metas[ 'product_type' ] = (string) $product->get_type();
-			$price                   = $product->get_price();
-			$metas[ 'prices' ]       = [
-				"price"                  => $price,
-				"regular_price"          => $price,
-				"sale_price"             => $price,
-				"max_price"              => $price,
-				"max_price_ps"           => $price,
-				"min_retail_price"       => $price,
-				"max_retail_price"       => $price,
-				"min_wholesale_price"    => $price,
-				"max_wholesale_price"    => $price,
-				"min_retail_price_ps"    => $price,
-				"max_retail_price_ps"    => $price,
-				"min_wholesale_price_ps" => $price,
-				"max_wholesale_price_ps" => $price,
+			$metas[ 'prices' ]       = self::extractPrices( $product );
+			$metas[ 'rating' ]       = [
+				"count"   => (int) $product->get_rating_count(),
+				"average" => (float) $product->get_average_rating(),
 			];
+			$default_variation       = self::extractDefaultVariation( $product );
+			if ( ! empty( $default_variation ) ) {
+				$metas[ 'default_variation' ] = $default_variation;
+			}
 
 			return $metas;
 		}
 
 		return false;
+	}
+
+	public static function extractPrices( $product ) {
+		// Extract prices.
+		if ( $product instanceof WC_Product_Variable ) {
+			$prices = $product->get_variation_prices( true );
+
+			$price         = $sale_price = current( $prices[ 'price' ] );
+			$regular_price = current( $prices[ 'regular_price' ] );
+			$pricing_mode  = 'fs';
+			$max_price     = $prices[ 'advanced_pricing_data' ][ $pricing_mode ][ 'max' ][ 'customer' ][ 'price' ] ?? end( $prices[ 'price' ] );
+
+			$retail_role      = brandlight_get_retail_pricing_default_role();
+			$min_retail_price = $prices[ 'advanced_pricing_data' ][ $pricing_mode ][ 'min' ][ $retail_role ][ 'price' ] ?? $price;
+			$max_retail_price = $prices[ 'advanced_pricing_data' ][ $pricing_mode ][ 'max' ][ $retail_role ][ 'price' ] ?? $max_price;
+
+			$wholesale_role      = brandlight_get_wholesale_pricing_default_role();
+			$min_wholesale_price = $prices[ 'advanced_pricing_data' ][ $pricing_mode ][ 'min' ][ $wholesale_role ][ 'price' ] ?? $price;
+			$max_wholesale_price = $prices[ 'advanced_pricing_data' ][ $pricing_mode ][ 'max' ][ $wholesale_role ][ 'price' ] ?? $max_price;
+
+
+		} else {
+			$price         = wc_get_price_to_display( $product );
+			$regular_price = wc_get_price_to_display( $product, [ 'price' => $product->get_regular_price() ] );
+
+			$sale_price          = $price;
+			$min_retail_price    = $price;
+			$max_retail_price    = $price;
+			$min_wholesale_price = $price;
+			$max_wholesale_price = $price;
+			$max_price           = $price;
+		}
+
+		$to_return = [
+			"price"               => $price,
+			"regular_price"       => $regular_price,
+			"sale_price"          => $sale_price,
+			"max_price"           => $max_price,
+			"min_retail_price"    => $min_retail_price,
+			"max_retail_price"    => $max_retail_price,
+			"min_wholesale_price" => $min_wholesale_price,
+			"max_wholesale_price" => $max_wholesale_price,
+		];
+
+		if ( class_exists( 'Brandlight_Feature_Postage_And_Packaging' ) ) {
+			$to_return = array_merge( $to_return, \Brandlight_Feature_Postage_And_Packaging::generateProductPSdata( $product ) );
+		}
+
+		return $to_return;
+	}
+
+	public static function extractDefaultVariation( $product ) {
+
+		$attributes = [];
+
+		if ( $product instanceof WC_Product_Variable ) {
+
+			if ( $retail_variation_id = brandlight_get_default_product_variation( $product, 'retail' ) ) {
+				$attributes[ 'retail' ] = $retail_variation_id;
+			}
+
+			if ( $wholesale_variation_id = brandlight_get_default_product_variation( $product, 'wholesale' ) ) {
+				$attributes[ 'wholesale' ] = $wholesale_variation_id;
+			}
+		}
+
+		return $attributes;
+
 	}
 }

@@ -20,23 +20,16 @@ class Hooks extends PluginComponent {
 	public const REINDEX_SUCCESS     = 3;
 	public const REINDEX_FAILED      = 4;
 
+	/**
+	 * @param array|null $params
+	 */
 	public function main( ?array $params = [] ): void {
-		add_action( 'init', [ $this, 'epiInit' ], 11 );
-		add_action( 'ep_post_sync_args', [ $this, 'epiAddHierarchicalTaxonomies' ], 10, 2 );
-		add_filter( 'ep_prepared_post_meta', [ $this, 'epiWhiteListMetas' ], 10, 2 );
-		add_filter( 'ep_autosuggest_options', [ $this, 'epiAutosuggestOptions' ] );
-		add_filter( 'ep_allow_post_content_filtered_index', function () {
-			return false;
-		} );
-		add_action(
-			'wp_enqueue_scripts', [ $this, 'epiEnqueueScripts' ],
-			10
-		);
-
-		add_action( 'toplevel_page_elasticpress', [
-			$this,
-			'epiAdminFooter',
-		], 9 );
+		add_action( 'init', [ $this, 'addTranslationsToIndexable' ], 11 );
+		add_action( 'ep_post_sync_args', [ $this, 'changePostStructureToIndex' ], 10, 2 );
+		add_filter( 'ep_prepared_post_meta', [ $this, 'whiteListMetas' ], 10, 2 );
+		add_filter( 'ep_allow_post_content_filtered_index', function () { return false; } );
+		add_action( 'wp_enqueue_scripts', [ $this, 'enqueueScripts' ], 10 );
+		add_action( 'toplevel_page_elasticpress', [ $this, 'adminFooter', ], 9 );
 		add_filter( 'cron_schedules', [ $this, 'reindexScheduleInterval' ] );
 		if ( ! wp_next_scheduled( 'epi_reindex_interval' ) ) {
 			wp_schedule_event( time(), 'every_tree_minutes', 'epi_reindex_interval' );
@@ -44,27 +37,46 @@ class Hooks extends PluginComponent {
 		add_action( 'epi_reindex_interval', [ $this, 'runCLIReindex' ] );
 	}
 
-	public function epiInit() {
+	/**
+	 * Create new indices for translations
+	 */
+	public function addTranslationsToIndexable() {
 		$languages         = Module::instance()->localization->getAcceptLanguages();
 		$original_language = Module::instance()->localization->getFromLanguage();
 		unset( $languages[ array_search( $original_language, $languages ) ] );
+		$languages = [ 'ru' ];
 		foreach ( $languages as $language ) {
 			$indexable_post = new Post( $language );
-//			$indexable_term = new Term( $language );
-
 			Indexables::factory()->register( $indexable_post );
-//			Indexables::factory()->register( $indexable_term );
 		}
 	}
 
-	public function epiAddHierarchicalTaxonomies( $post_args, $post_id ) {
+	/**
+     * Create hierarchical taxonomies tree for index
+     *
+	 * @param array $post_args
+	 * @param $post_id
+	 *
+	 * @return mixed
+	 */
+	public function changePostStructureToIndex( $post_args, $post_id ) {
 		$terms_hierarchy                        = PostTermsHierarchyBuilder::get( $post_id );
+//		var_dump( $terms_hierarchy );die;
 		$post_args[ 'hierarchical_taxonomies' ] = $terms_hierarchy;
+		$post_args[ 'permalink' ] = wp_make_link_relative( $post_args[ 'permalink' ] );
 
 		return $post_args;
 	}
 
-	public function epiWhiteListMetas( $metas, $post ) {
+	/**
+     * Remove unusable metas from index and update some metas structure for our need
+     *
+	 * @param $metas
+	 * @param $post
+	 *
+	 * @return mixed
+	 */
+	public function whiteListMetas( $metas, $post ) {
 		foreach ( $metas as $key => $data ) {
 			if ( ! in_array( $key, self::$white_list_metas, true ) ) {
 				unset( $metas[ $key ] );
@@ -74,7 +86,7 @@ class Hooks extends PluginComponent {
 						$metas[ 'images' ] = CustomMetasBuilder::generateImagesData( $data[ 0 ] );
 					}
 					if ( $key == '_stock_status' ) {
-						$metas[ '_stock_status' ] =  CustomMetasBuilder::generateStockStatusWithReadableName( $data[ 0 ] );
+						$metas[ '_stock_status' ] = CustomMetasBuilder::generateStockStatusWithReadableName( $data[ 0 ] );
 					}
 					if ( $key == 'grade' ) {
 						$metas[ $key ][ 0 ] = min( (float) $data[ 0 ], 5.0 );
@@ -84,27 +96,22 @@ class Hooks extends PluginComponent {
 		}
 
 		if ( $post->post_type == 'product' ) {
-			$product = wc_get_product( $post );
+			$product       = wc_get_product( $post );
 			$product_metas = CustomMetasBuilder::generateProductMetas( $product );
-			if( $product_metas ){
-			    foreach ( $product_metas as $key => $value ){
-			        $metas[ $key ] = $value;
-                }
-            }
+			if ( $product_metas ) {
+				foreach ( $product_metas as $key => $value ) {
+					$metas[ $key ] = $value;
+				}
+			}
 		}
 
 		return $metas;
 	}
 
-
-
-	public function epiAutosuggestOptions( $options ) {
-		$options[ 'link_pattern_callback' ] = 'bl_ep_autosuggest_link_pattern';
-
-		return $options;
-	}
-
-	public function epiAdminFooter() {
+	/**
+	 * Add reindex trigger button
+	 */
+	public function adminFooter() {
 		if ( wp_verify_nonce( $_POST[ Plugin::instance()->getName() ] ?? null, 'reindex' ) ) {
 			if ( $this->triggerCronJob() ) {
 				echo 'Reindex triggered';
@@ -122,6 +129,11 @@ class Hooks extends PluginComponent {
 		<?php
 	}
 
+	/**
+     * Trigger cron job for reindex
+     *
+	 * @return bool
+	 */
 	public function triggerCronJob() {
 		$option_name = Plugin::instance()->getName() . '_reindex_in_progress';
 		$job_status  = get_option( $option_name );
@@ -132,6 +144,13 @@ class Hooks extends PluginComponent {
 		return update_option( $option_name, self::REINDEX_TRIGGERED );
 	}
 
+	/**
+     * reindex cron interval
+     *
+	 * @param $schedules
+	 *
+	 * @return mixed
+	 */
 	public function reindexScheduleInterval( $schedules ) {
 		$schedules[ 'every_tree_minutes' ] = [
 			'interval' => 180,
@@ -141,6 +160,9 @@ class Hooks extends PluginComponent {
 		return $schedules;
 	}
 
+	/**
+	 * wp cron reindex ( run cli commands )
+	 */
 	public function runCLIReindex() {
 		$option_in_progress = Plugin::instance()->getName() . '_reindex_in_progress';
 		$job_status         = get_option( $option_in_progress );
@@ -149,7 +171,6 @@ class Hooks extends PluginComponent {
 		if ( $job_status == self::REINDEX_TRIGGERED && $wp_cli_exist ) {
 			update_option( $option_in_progress, self::REINDEX_IN_PROGRESS );
 			$executed = exec( 'wp elasticpress put-mapping && wp elasticpress index' );
-			update_option( 'asdqwe', $executed );
 			if ( $executed != null ) {
 				update_option( $option_in_progress, self::REINDEX_SUCCESS );
 			} else {
@@ -158,7 +179,7 @@ class Hooks extends PluginComponent {
 		}
 	}
 
-	public function epiEnqueueScripts() {
+	public function enqueueScripts() {
 		wp_enqueue_script(
 			'epi-elasticpress-autosuggest',
 			plugin_dir_url( __DIR__ ) . 'assets/js/search.js',
