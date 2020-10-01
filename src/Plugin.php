@@ -14,7 +14,7 @@ use Psr\SimpleCache\CacheInterface;
  *
  * @package Brandlight\ElasticPress
  *
- * @property Hooks $hooks
+ * @property Hooks    $hooks
  * @property Mappings $mappings
  */
 class Plugin extends \NovemBit\CCA\wp\Plugin {
@@ -35,6 +35,10 @@ class Plugin extends \NovemBit\CCA\wp\Plugin {
 		$filesystem        = new Filesystem( $filesystemAdapter );
 		$this->cache_pool  = new FilesystemCachePool( $filesystem );
 
+	}
+
+	public function onActivate(): void {
+		parent::onActivate();
 	}
 
 	public function getName(): string {
