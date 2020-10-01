@@ -27,7 +27,9 @@ class Hooks extends PluginComponent {
 		add_action( 'init', [ $this, 'addTranslationsToIndexable' ], 11 );
 		add_action( 'ep_post_sync_args', [ $this, 'changePostStructureToIndex' ], 10, 2 );
 		add_filter( 'ep_prepared_post_meta', [ $this, 'whiteListMetas' ], 10, 2 );
-		add_filter( 'ep_allow_post_content_filtered_index', function () { return false; } );
+		add_filter( 'ep_allow_post_content_filtered_index', function () {
+			return false;
+		} );
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueueScripts' ], 10 );
 		add_action( 'toplevel_page_elasticpress', [ $this, 'adminFooter', ], 9 );
 		add_filter( 'cron_schedules', [ $this, 'reindexScheduleInterval' ] );
@@ -44,7 +46,6 @@ class Hooks extends PluginComponent {
 		$languages         = Module::instance()->localization->getAcceptLanguages();
 		$original_language = Module::instance()->localization->getFromLanguage();
 		unset( $languages[ array_search( $original_language, $languages ) ] );
-		$languages = [ 'ru' ];
 		foreach ( $languages as $language ) {
 			$indexable_post = new Post( $language );
 			Indexables::factory()->register( $indexable_post );
@@ -52,25 +53,41 @@ class Hooks extends PluginComponent {
 	}
 
 	/**
-     * Create hierarchical taxonomies tree for index
-     *
+	 * Create hierarchical taxonomies tree for index
+	 *
 	 * @param array $post_args
-	 * @param $post_id
+	 * @param       $post_id
 	 *
 	 * @return mixed
 	 */
 	public function changePostStructureToIndex( $post_args, $post_id ) {
-		$terms_hierarchy                        = PostTermsHierarchyBuilder::get( $post_id );
+		$terms_hierarchy = PostTermsHierarchyBuilder::get( $post_id );
 
 		$post_args[ 'hierarchical_taxonomies' ] = $terms_hierarchy;
-		$post_args[ 'permalink' ] = wp_make_link_relative( $post_args[ 'permalink' ] );
+		$post_args[ 'permalink' ]               = wp_make_link_relative( $post_args[ 'permalink' ] );
+		$post_args[ 'post_content' ]            = strip_shortcodes( strip_tags( $post_args[ 'post_content' ] ) );
+		$post_args[ 'terms' ]                   = $this->addTermsRelativeUrls( $post_args[ 'terms' ] );
 
 		return $post_args;
 	}
 
+	public function addTermsRelativeUrls( $terms ) {
+		if ( ! empty( $terms ) ) {
+			foreach ( $terms as $tax_name => &$taxonomy ) {
+				if ( ! empty( $taxonomy ) ) {
+					foreach ( $taxonomy as &$term ) {
+						$term[ 'url' ] = wp_make_link_relative( get_term_link( $term[ 'term_id' ], $tax_name ) );
+					}
+				}
+			}
+		}
+
+		return $terms;
+	}
+
 	/**
-     * Remove unusable metas from index and update some metas structure for our need
-     *
+	 * Remove unusable metas from index and update some metas structure for our need
+	 *
 	 * @param $metas
 	 * @param $post
 	 *
@@ -82,19 +99,22 @@ class Hooks extends PluginComponent {
 				unset( $metas[ $key ] );
 			} else {
 				if ( ! empty( $data ) ) {
+					//generate image urls
 					if ( $key == '_thumbnail_id' ) {
 						$metas[ 'images' ] = CustomMetasBuilder::generateImagesData( $data[ 0 ] );
 					}
+					//generate stock status with readable name
 					if ( $key == '_stock_status' ) {
 						$metas[ '_stock_status' ] = CustomMetasBuilder::generateStockStatusWithReadableName( $data[ 0 ] );
 					}
+					//set grade default value
 					if ( $key == 'grade' ) {
 						$metas[ $key ][ 0 ] = min( (float) $data[ 0 ], 5.0 );
 					}
 				}
 			}
 		}
-
+		//generate product metas for shop ui
 		if ( $post->post_type == 'product' ) {
 			$product       = wc_get_product( $post );
 			$product_metas = CustomMetasBuilder::generateProductMetas( $product );
@@ -103,7 +123,11 @@ class Hooks extends PluginComponent {
 					$metas[ $key ] = $value;
 				}
 			}
+
+			$uids            = CustomMetasBuilder::generateUids( $post );
+			$metas[ 'uids' ] = $uids;
 		}
+
 
 		return $metas;
 	}
@@ -130,8 +154,8 @@ class Hooks extends PluginComponent {
 	}
 
 	/**
-     * Trigger cron job for reindex
-     *
+	 * Trigger cron job for reindex
+	 *
 	 * @return bool
 	 */
 	public function triggerCronJob() {
@@ -145,8 +169,8 @@ class Hooks extends PluginComponent {
 	}
 
 	/**
-     * reindex cron interval
-     *
+	 * reindex cron interval
+	 *
 	 * @param $schedules
 	 *
 	 * @return mixed

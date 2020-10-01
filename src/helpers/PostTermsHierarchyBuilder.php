@@ -1,8 +1,6 @@
 <?php
 
-
 namespace Brandlight\ElasticPress\helpers;
-
 
 class PostTermsHierarchyBuilder {
 
@@ -81,13 +79,11 @@ class PostTermsHierarchyBuilder {
 
 		$taxonomies_hierarchy = [];
 		foreach ( self::$tax_objects[ $post->post_type ] as $taxonomy ) {
-			if ( ! $taxonomy->hierarchical ) {
-				continue;
-			}
-
-			$terms = wp_get_object_terms( $post->ID, $taxonomy->name );
-			if ( ! is_wp_error( $terms ) ) {
-				$taxonomies_hierarchy[ $taxonomy->name ] = self::getTermsHierarchy( $terms, $separator );
+			if ( $taxonomy->hierarchical && ( $taxonomy->public || $taxonomy->publicly_queryable ) ) {
+				$terms = wp_get_object_terms( $post->ID, $taxonomy->name );
+				if ( ! is_wp_error( $terms ) ) {
+					$taxonomies_hierarchy[ $taxonomy->name ] = self::getTermsHierarchy( $terms, $separator );
+				}
 			}
 		}
 

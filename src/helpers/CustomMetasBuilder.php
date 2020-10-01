@@ -79,6 +79,42 @@ class CustomMetasBuilder {
 		return false;
 	}
 
+	/**
+	 * @param $post
+	 *
+	 * @return array
+	 */
+	public static function generateUids( $post ) {
+		$post                           = get_post( $post );
+		$product                        = wc_get_product( $post );
+		$metas[ 'sku' ]                 = $product->get_sku();
+		$metas[ 'uid_vendor_item_ids' ] = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_vendor_item_ids', true ) );
+		$metas[ 'uid_gtins' ]           = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_gtins', true ) );
+		$metas[ 'uid_barcodes' ]        = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_barcodes', true ) );
+		$metas[ 'uid_asins' ]           = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_asins', true ) );
+		$metas[ 'uid_viart_ids' ]       = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_viart_ids', true ) );
+		$metas[ 'uid_mfns' ]            = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_mfns', true ) );
+		$metas[ 'uid_nav_item_ids' ]    = preg_split( '/, ?/', get_post_meta( $post->ID, 'uid_nav_item_ids', true ) );
+
+		$to_return = array_values( array_filter( array_unique( array_merge(
+			$metas[ 'uid_vendor_item_ids' ],
+			$metas[ 'uid_gtins' ],
+			$metas[ 'uid_barcodes' ],
+			$metas[ 'uid_asins' ],
+			$metas[ 'uid_viart_ids' ],
+			$metas[ 'uid_mfns' ],
+			$metas[ 'uid_nav_item_ids' ],
+			[ $metas[ 'sku' ] ]
+		) ) ) );
+
+		return $to_return;
+	}
+
+	/**
+	 * @param $product
+	 *
+	 * @return array
+	 */
 	public static function extractPrices( $product ) {
 		// Extract prices.
 		if ( $product instanceof WC_Product_Variable ) {
@@ -128,6 +164,11 @@ class CustomMetasBuilder {
 		return $to_return;
 	}
 
+	/**
+	 * @param $product
+	 *
+	 * @return array
+	 */
 	public static function extractDefaultVariation( $product ) {
 
 		$attributes = [];
