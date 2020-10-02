@@ -30,7 +30,6 @@ class Hooks extends PluginComponent {
 		add_filter( 'ep_allow_post_content_filtered_index', function () {
 			return false;
 		} );
-		add_action( 'wp_enqueue_scripts', [ $this, 'enqueueScripts' ], 10 );
 		add_action( 'toplevel_page_elasticpress', [ $this, 'adminFooter', ], 9 );
 		add_filter( 'cron_schedules', [ $this, 'reindexScheduleInterval' ] );
 		if ( ! wp_next_scheduled( 'epi_reindex_interval' ) ) {
@@ -201,21 +200,5 @@ class Hooks extends PluginComponent {
 				update_option( $option_in_progress, self::REINDEX_FAILED );
 			}
 		}
-	}
-
-	public function enqueueScripts() {
-		wp_enqueue_script(
-			'epi-elasticpress-autosuggest',
-			plugin_dir_url( __DIR__ ) . 'assets/js/search.js',
-			[],
-			random_int( 1, 900 )
-		);
-
-		wp_enqueue_style(
-			'epi-elasticpress-autosuggest',
-			plugin_dir_url( __DIR__ ) . 'assets/css/search.css',
-			[],
-			random_int( 1, 900 )
-		);
 	}
 }
