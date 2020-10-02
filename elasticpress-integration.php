@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: ElasticPress Integration
+ * Plugin Name: ElasticPress Brandlight Add-on
  * Description: A fast and flexible search and query engine for WordPress.
- * Version:     3.4.3
- * Author:      Brandlight
+ * Version:     1.1.0
+ * Author:      Erik | Novembit
  * License:     GPLv2 or later
  * Text Domain: elasticpress
  * Domain Path: /lang/
